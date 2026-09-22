@@ -1,0 +1,153 @@
+# OpenVINO Model Server — Docker Compose
+# Profiles: cpu | gpu | npu
+#   docker compose --profile cpu up
+#   docker compose --profile gpu up
+#   docker compose --profile npu up
+# Image pin: openvino/model_server:2026.4.0-gpu (CPU works on this tag; accel needs it)
+#
+# Non-goal: multi-GPU tensor parallel (OVMS GH #3816).
+
+x-ovms-common: &ovms-common
+  image: openvino/model_server:2026.4.0-gpu
+  volumes:
+    - ./models:/models:rw
+    - ./scripts/entrypoint.sh:/usr/local/bin/ovms-entrypoint.sh:ro
+  entrypoint: ["/bin/bash", "/usr/local/bin/ovms-entrypoint.sh"]
+  environment:
+    HF_TOKEN: ${HF_TOKEN:-}
+    API_KEY: ${API_KEY:-}
+    ENABLE_PREFIX_CACHING: ${ENABLE_PREFIX_CACHING:-0}
+    # OVMS_DEVICE set per profile (CPU|GPU|NPU) for entrypoint prefix-cache logic
+  ports:
+    - "${REST_PORT:-8000}:${REST_PORT:-8000}"
+    - "${GRPC_PORT:-9000}:${GRPC_PORT:-9000}"
+  # Model --pull + load can be slow; start_period is intentionally generous.
+  # Image may lack curl — try curl, then wget, else fail closed (see README).
+  healthcheck:
+    test:
+      [
+        "CMD-SHELL",
+        "if command -v curl >/dev/null 2>&1; then curl -sf http://127.0.0.1:${REST_PORT:-8000}/v1/models >/dev/null; elif command -v wget >/dev/null 2>&1; then wget -q -O /dev/null http://127.0.0.1:${REST_PORT:-8000}/v1/models; else echo 'healthcheck: neither curl nor wget in image' >&2; exit 1; fi",
+      ]
+    interval: 30s
+    timeout: 10s
+    retries: 10
+    start_period: 300s
+  restart: unless-stopped
+
+services:
+  # --- CPU: no device binds ---
+  ovms-cpu:
+    <<: *ovms-common
+    profiles: ["cpu"]
+    container_name: ovms-cpu
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      API_KEY: ${API_KEY:-}
+      ENABLE_PREFIX_CACHING: ${ENABLE_PREFIX_CACHING:-0}
+      OVMS_DEVICE: CPU
+    command:
+      - --rest_port
+      - "${REST_PORT:-8000}"
+      - --port
+      - "${GRPC_PORT:-9000}"
+      - --model_repository_path
+      - /models
+      - --source_model
+      - "${SOURCE_MODEL}"
+      - --task
+      - text_generation
+      - --target_device
+      - CPU
+      - --pull
+      - --cache_dir
+      - /models/.ovms_cache
+      - --cache_size
+      - "${CACHE_SIZE:-10}"
+      - --max_num_seqs
+      - "${MAX_NUM_SEQS:-8}"
+      - --max_num_batched_tokens
+      - "${MAX_NUM_BATCHED_TOKENS:-8192}"
+      - --kv_cache_precision
+      - "${KV_CACHE_PRECISION:-u8}"
+    # Optional host user mapping (uncomment if permission issues on ./models)
+    # user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+
+  # --- GPU: Intel /dev/dri + render group ---
+  ovms-gpu:
+    <<: *ovms-common
+    profiles: ["gpu"]
+    container_name: ovms-gpu
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${RENDER_GID:-109}"
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      API_KEY: ${API_KEY:-}
+      ENABLE_PREFIX_CACHING: ${ENABLE_PREFIX_CACHING:-0}
+      OVMS_DEVICE: GPU
+    # user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    command:
+      - --rest_port
+      - "${REST_PORT:-8000}"
+      - --port
+      - "${GRPC_PORT:-9000}"
+      - --model_repository_path
+      - /models
+      - --source_model
+      - "${SOURCE_MODEL}"
+      - --task
+      - text_generation
+      - --target_device
+      - GPU
+      - --pull
+      - --cache_dir
+      - /models/.ovms_cache
+      - --cache_size
+      - "${CACHE_SIZE:-10}"
+      - --max_num_seqs
+      - "${MAX_NUM_SEQS:-8}"
+      - --max_num_batched_tokens
+      - "${MAX_NUM_BATCHED_TOKENS:-8192}"
+      - --kv_cache_precision
+      - "${KV_CACHE_PRECISION:-u8}"
+
+  # --- NPU: /dev/accel (+ dri); Stateful — CB / prefix flags are NO-OPS ---
+  # Do NOT pass cache_size / DSF / max_num_batched_tokens / max_num_seqs /
+  # prefix caching here (entrypoint also skips prefix for OVMS_DEVICE=NPU).
+  ovms-npu:
+    <<: *ovms-common
+    profiles: ["npu"]
+    container_name: ovms-npu
+    devices:
+      - /dev/accel:/dev/accel
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${RENDER_GID:-109}"
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+      API_KEY: ${API_KEY:-}
+      ENABLE_PREFIX_CACHING: ${ENABLE_PREFIX_CACHING:-0}
+      OVMS_DEVICE: NPU
+    # user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    command:
+      - --rest_port
+      - "${REST_PORT:-8000}"
+      - --port
+      - "${GRPC_PORT:-9000}"
+      - --model_repository_path
+      - /models
+      - --source_model
+      - "${SOURCE_MODEL}"
+      - --task
+      - text_generation
+      - --target_device
+      - NPU
+      - --pull
+      - --cache_dir
+      - /models/.ovms_cache
+      - --pipeline_type
+      - Stateful
+      - --max_prompt_len
+      - "${MAX_PROMPT_LEN:-2048}"

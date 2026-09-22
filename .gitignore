@@ -1,0 +1,12 @@
+# local secrets / overrides
+.env
+
+# model weights and OVMS cache (keep directory via .gitkeep)
+models/**
+!models/.gitkeep
+
+# caches / scratch
+*.log
+.ovms_cache/
+__pycache__/
+.DS_Store
