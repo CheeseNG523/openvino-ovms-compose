@@ -63,7 +63,7 @@ services:
       - --model_repository_path
       - /models
       - --source_model
-      - "${SOURCE_MODEL}"
+      - "${SOURCE_MODEL:-OpenVINO/Qwen2.5-1.5B-Instruct-int4-ov}"
       - --task
       - text_generation
       - --target_device
@@ -79,7 +79,8 @@ services:
       - "${MAX_NUM_BATCHED_TOKENS:-8192}"
       - --kv_cache_precision
       - "${KV_CACHE_PRECISION:-u8}"
-    # Optional host user mapping (uncomment if permission issues on ./models)
+    # Optional host user mapping — LEFT COMMENTED on purpose (root in container is OK for many hosts).
+    # Uncomment ONLY if ./models or /dev/dri|/dev/accel hit permission errors:
     # user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
 
   # --- GPU: Intel /dev/dri + render group ---
@@ -98,6 +99,7 @@ services:
       DYNAMIC_SPLIT_FUSE: ${DYNAMIC_SPLIT_FUSE:-0}
       IDLE_UNLOAD_TIMEOUT_SECONDS: ${IDLE_UNLOAD_TIMEOUT_SECONDS:-}
       OVMS_DEVICE: GPU
+    # user: LEFT COMMENTED on purpose. Uncomment ONLY on permission errors:
     # user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     command:
       - --rest_port
@@ -107,7 +109,7 @@ services:
       - --model_repository_path
       - /models
       - --source_model
-      - "${SOURCE_MODEL}"
+      - "${SOURCE_MODEL:-OpenVINO/Qwen2.5-1.5B-Instruct-int4-ov}"
       - --task
       - text_generation
       - --target_device
@@ -144,6 +146,7 @@ services:
       DYNAMIC_SPLIT_FUSE: ${DYNAMIC_SPLIT_FUSE:-0}
       IDLE_UNLOAD_TIMEOUT_SECONDS: ${IDLE_UNLOAD_TIMEOUT_SECONDS:-}
       OVMS_DEVICE: NPU
+    # user: LEFT COMMENTED on purpose. Uncomment ONLY on permission errors:
     # user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     command:
       - --rest_port
@@ -153,7 +156,7 @@ services:
       - --model_repository_path
       - /models
       - --source_model
-      - "${SOURCE_MODEL}"
+      - "${SOURCE_MODEL:-OpenVINO/Qwen2.5-1.5B-Instruct-int4-ov}"
       - --task
       - text_generation
       - --target_device

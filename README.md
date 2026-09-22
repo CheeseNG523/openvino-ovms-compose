@@ -131,6 +131,13 @@ Use `--max_prompt_len` and INT4 NPU-friendly exports (`*-int4-cw-ov` when listed
 
 Tensor parallel / multi-GPU is an **explicit non-goal**. OVMS multi-GPU TP has known gaps ([openvinotoolkit/model_server#3816](https://github.com/openvinotoolkit/model_server/issues/3816)). Single device only — do not add TP env vars.
 
+
+## Host user mapping (`user:`)
+
+Compose keeps `user: "${HOST_UID}:${HOST_GID}"` **commented out** on purpose. The container runs as the image default user (typically root), which is fine for many hosts when `./models` is writable.
+
+Uncomment `user:` under the profile service in `docker-compose.yml` **only if** you hit permission errors on `./models` or device nodes (`/dev/dri`, `/dev/accel`). Then set `HOST_UID` / `HOST_GID` in `.env` to your host ids (`id -u` / `id -g`).
+
 ## Healthcheck
 
 Compose healthcheck probes `GET http://127.0.0.1:${REST_PORT}/v1/models`:
