@@ -8,6 +8,7 @@
 - `docker compose config` for profiles `cpu`, `gpu`, and `npu` (standalone Compose v2.29.7; no Docker Engine required for config)
 - Entrypoint / pull-model scripts: `bash -n` syntax check; `chmod +x`
 - Resolved config checks: CPU has CB knobs; GPU has `/dev/dri` + render group; NPU has Stateful + `max_prompt_len` and **no** `cache_size` / `max_num_seqs` / `max_num_batched_tokens`
+- Polish commit wires `DYNAMIC_SPLIT_FUSE` / `IDLE_UNLOAD_TIMEOUT_SECONDS` and auth-aware healthcheck in config only — **does not add runtime proof**
 
 ## What was **not** proven on the build box
 
@@ -17,6 +18,7 @@
 - Whether the official image includes `curl`/`wget` (healthcheck falls back / fails closed)
 - Whether `/ovms/bin/ovms` vs `ovms` on PATH matches the pinned tag (entrypoint probes both)
 - Intel GPU (`/dev/dri`) or NPU (`/dev/accel`) passthrough
-- End-to-end `--api_key_file` / `--enable_prefix_caching` against a live OVMS process
+- End-to-end `--api_key_file` / `--enable_prefix_caching` / `--dynamic_split_fuse` / `--idle_unload_timeout_seconds` against a live OVMS process
+- Auth-aware healthcheck against a live process with `API_KEY` set
 
 Runtime proof needs a host with Docker Engine (and optionally Intel GPU/NPU drivers). Config validation alone does not equal a serving smoke test.

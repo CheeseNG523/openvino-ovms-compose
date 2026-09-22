@@ -26,9 +26,12 @@ Compose / `.env` knobs mapped to familiar vLLM serving flags. Mapping quality no
 
 | Knob | Wiring |
 | --- | --- |
-| `API_KEY` | Empty → no auth. Non-empty → `scripts/entrypoint.sh` writes `/tmp/ovms_api_key` and adds `--api_key_file`. OVMS also reads env `API_KEY` if the file flag is omitted. |
+| `API_KEY` | Empty → no auth. Non-empty → `scripts/entrypoint.sh` writes `/tmp/ovms_api_key` and adds `--api_key_file`. OVMS also reads env `API_KEY` if the file flag is omitted. Healthcheck sends Bearer when non-empty. |
 | `ENABLE_PREFIX_CACHING=1` | Entrypoint appends `--enable_prefix_caching` for **cpu/gpu** only (`OVMS_DEVICE≠NPU`). |
 | `ENABLE_PREFIX_CACHING` on NPU | No-op: entrypoint skips injection; do not treat as effective. |
+| `DYNAMIC_SPLIT_FUSE=1` | Entrypoint appends `--dynamic_split_fuse` for **cpu/gpu** only. Default `0`. |
+| `DYNAMIC_SPLIT_FUSE` on NPU | No-op: entrypoint skips injection. |
+| `IDLE_UNLOAD_TIMEOUT_SECONDS` | When set and non-empty (including `0`), entrypoint appends `--idle_unload_timeout_seconds <value>` for **all** devices. Empty/unset → omit. |
 
 ## NPU Stateful ignores (no-ops)
 
@@ -37,3 +40,7 @@ Compose / `.env` knobs mapped to familiar vLLM serving flags. Mapping quality no
 ## Non-goal: multi-GPU / tensor parallel
 
 This project intentionally does **not** expose `--tensor-parallel-size` / multi-GPU TP. OVMS multi-GPU TP support has known gaps (GitHub issue [#3816](https://github.com/openvinotoolkit/model_server/issues/3816)). Single device only.
+
+## Serving mode note
+
+This repo uses `--source_model` + `--task text_generation` + `--pull`. OVMS `--config_path` multi-model mode is not wired.

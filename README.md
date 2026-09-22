@@ -8,6 +8,8 @@ Public repo target: [CheeseNG523/openvino-ovms-compose](https://github.com/Chees
 
 ## Quickstart
 
+**Enable only one Compose profile at a time** — cpu, gpu, and npu all publish the same host ports, so two profiles together will clash.
+
 ```bash
 cp .env.example .env
 # edit SOURCE_MODEL / ports / API_KEY as needed
@@ -46,6 +48,10 @@ If `API_KEY` is set in `.env`, pass `-H "Authorization: Bearer $API_KEY"` (or Op
 Client `base_url`: `http://localhost:8000/v1`.
 
 gRPC is also published on `GRPC_PORT` (default 9000); REST is primary for tests/docs.
+
+### Serving mode (this repo)
+
+Default path: `--source_model` + `--task text_generation` + `--pull` into `/models`. The OVMS multi-model `--config_path /models/config.json` mode is **not** used here (out of scope / not wired). Do not expect a `config.json` in this repo.
 
 ### OpenAI Python client
 
@@ -89,6 +95,13 @@ When `ENABLE_PREFIX_CACHING=1`, the entrypoint appends `--enable_prefix_caching`
 
 On **npu** (Stateful), prefix caching is a documented **no-op** — the entrypoint never injects the flag (`OVMS_DEVICE=NPU`).
 
+## Dynamic split fuse + idle unload
+
+| Knob | Behavior |
+| --- | --- |
+| `DYNAMIC_SPLIT_FUSE=1` | Entrypoint appends `--dynamic_split_fuse` for **cpu/gpu** only. Default `0` (off). NPU: no-op (skipped). |
+| `IDLE_UNLOAD_TIMEOUT_SECONDS=<n>` | When set and non-empty (including `0`), entrypoint appends `--idle_unload_timeout_seconds <n>` for **all** devices (OVMS-specific; OK on NPU). Leave empty/unset to omit. |
+
 ## Device notes
 
 | Profile | Host needs | Compose devices | `--target_device` |
@@ -97,7 +110,7 @@ On **npu** (Stateful), prefix caching is a documented **no-op** — the entrypoi
 | `gpu` | `/dev/dri`, render group | `/dev/dri` + `group_add: RENDER_GID` | `GPU` |
 | `npu` | `/dev/accel` (+ dri) | accel + dri + render | `NPU` + `--pipeline_type Stateful` |
 
-NPU is **never** auto-selected. Set the profile explicitly.
+NPU is **never** auto-selected. Set the profile explicitly. Run **one profile at a time** (shared host ports).
 
 Find render GID: `getent group render | cut -d: -f3` (often `109` or `110`). Set `RENDER_GID` in `.env`.
 
@@ -106,7 +119,7 @@ Find render GID: `getent group render | cut -d: -f3` (often `109` or `110`). Set
 Do **not** treat these as effective with `--profile npu`:
 
 - `cache_size`
-- dynamic split fuse (DSF)
+- dynamic split fuse (DSF) / `DYNAMIC_SPLIT_FUSE`
 - `max_num_batched_tokens`
 - `max_num_seqs`
 - prefix caching (`ENABLE_PREFIX_CACHING`)
@@ -126,12 +139,16 @@ Compose healthcheck probes `GET http://127.0.0.1:${REST_PORT}/v1/models`:
 2. Else `wget -q -O /dev/null`
 3. Else **fail closed** (container stays unhealthy until you exec a manual check)
 
+When `API_KEY` is **non-empty**, the probe sends `Authorization: Bearer $API_KEY` (`curl -H` / `wget --header=`). When empty, the probe stays unauthenticated.
+
 `start_period: 300s` is intentional: first `--pull` + model load can take several minutes. Do not shorten it without reason.
 
 Manual check from the host:
 
 ```bash
 curl -sf http://localhost:8000/v1/models
+# with auth:
+# curl -sf -H "Authorization: Bearer $API_KEY" http://localhost:8000/v1/models
 # KServe-style (if enabled in your image):
 # curl -sf http://localhost:8000/v2/health/live
 # curl -sf http://localhost:8000/v2/health/ready
@@ -177,21 +194,23 @@ See [docs/VLLM_FLAG_MAP.md](docs/VLLM_FLAG_MAP.md) and comments in `.env.example
 - Wrong UID / missing render group → permission denied on dri/accel — set `HOST_UID`/`HOST_GID`/`RENDER_GID` and uncomment `user:` if needed
 - Healthcheck before model load → generous `start_period` (300s); first pull can be large
 - Healthcheck fails closed if the image has neither `curl` nor `wget` — check manually from the host
+- Two profiles at once → host port clash (unsupported)
 - Missing `HF_TOKEN` on gated models → 401
 - Switching profile/device → `docker compose --profile <new> up -d --force-recreate`
 - Classic TensorFlow Serving model layout for LLMs → discontinued; this project is GenAI `text_generation` only
 - Expecting multi-GPU TP → unsupported here (#3816)
+- Expecting `--config_path` multi-model → not wired in this repo
 
 ## Layout
 
 ```
 openvino-ovms-compose/
-  docker-compose.yml      # profiles: cpu | gpu | npu
+  docker-compose.yml      # profiles: cpu | gpu | npu (one at a time)
   .env.example
   README.md
   models/.gitkeep         # weights gitignored
   scripts/
-    entrypoint.sh         # API_KEY file + prefix-cache injection
+    entrypoint.sh         # API_KEY / prefix / DSF / idle injection
     pull-model.sh
   docs/
     VLLM_FLAG_MAP.md

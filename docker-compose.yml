@@ -5,6 +5,10 @@
 #   docker compose --profile npu up
 # Image pin: openvino/model_server:2026.4.0-gpu (CPU works on this tag; accel needs it)
 #
+# WARNING: Enable only ONE profile at a time. Starting two (e.g. cpu+gpu)
+# is unsupported — they share the same host REST/gRPC ports and will clash.
+# Device binds differ per profile, so services stay separate by design.
+#
 # Non-goal: multi-GPU tensor parallel (OVMS GH #3816).
 
 x-ovms-common: &ovms-common
@@ -17,17 +21,20 @@ x-ovms-common: &ovms-common
     HF_TOKEN: ${HF_TOKEN:-}
     API_KEY: ${API_KEY:-}
     ENABLE_PREFIX_CACHING: ${ENABLE_PREFIX_CACHING:-0}
-    # OVMS_DEVICE set per profile (CPU|GPU|NPU) for entrypoint prefix-cache logic
+    DYNAMIC_SPLIT_FUSE: ${DYNAMIC_SPLIT_FUSE:-0}
+    IDLE_UNLOAD_TIMEOUT_SECONDS: ${IDLE_UNLOAD_TIMEOUT_SECONDS:-}
+    # OVMS_DEVICE set per profile (CPU|GPU|NPU) for entrypoint prefix-cache / DSF logic
   ports:
     - "${REST_PORT:-8000}:${REST_PORT:-8000}"
     - "${GRPC_PORT:-9000}:${GRPC_PORT:-9000}"
   # Model --pull + load can be slow; start_period is intentionally generous.
   # Image may lack curl — try curl, then wget, else fail closed (see README).
+  # When API_KEY is set, probe sends Authorization: Bearer (auth-aware).
   healthcheck:
     test:
       [
         "CMD-SHELL",
-        "if command -v curl >/dev/null 2>&1; then curl -sf http://127.0.0.1:${REST_PORT:-8000}/v1/models >/dev/null; elif command -v wget >/dev/null 2>&1; then wget -q -O /dev/null http://127.0.0.1:${REST_PORT:-8000}/v1/models; else echo 'healthcheck: neither curl nor wget in image' >&2; exit 1; fi",
+        "AUTH=\"\"; if [ -n \"$${API_KEY}\" ]; then AUTH=\"Authorization: Bearer $${API_KEY}\"; fi; if command -v curl >/dev/null 2>&1; then if [ -n \"$$AUTH\" ]; then curl -sf -H \"$$AUTH\" http://127.0.0.1:${REST_PORT:-8000}/v1/models >/dev/null; else curl -sf http://127.0.0.1:${REST_PORT:-8000}/v1/models >/dev/null; fi; elif command -v wget >/dev/null 2>&1; then if [ -n \"$$AUTH\" ]; then wget -q -O /dev/null --header=\"$$AUTH\" http://127.0.0.1:${REST_PORT:-8000}/v1/models; else wget -q -O /dev/null http://127.0.0.1:${REST_PORT:-8000}/v1/models; fi; else echo 'healthcheck: neither curl nor wget in image' >&2; exit 1; fi",
       ]
     interval: 30s
     timeout: 10s
@@ -45,6 +52,8 @@ services:
       HF_TOKEN: ${HF_TOKEN:-}
       API_KEY: ${API_KEY:-}
       ENABLE_PREFIX_CACHING: ${ENABLE_PREFIX_CACHING:-0}
+      DYNAMIC_SPLIT_FUSE: ${DYNAMIC_SPLIT_FUSE:-0}
+      IDLE_UNLOAD_TIMEOUT_SECONDS: ${IDLE_UNLOAD_TIMEOUT_SECONDS:-}
       OVMS_DEVICE: CPU
     command:
       - --rest_port
@@ -86,6 +95,8 @@ services:
       HF_TOKEN: ${HF_TOKEN:-}
       API_KEY: ${API_KEY:-}
       ENABLE_PREFIX_CACHING: ${ENABLE_PREFIX_CACHING:-0}
+      DYNAMIC_SPLIT_FUSE: ${DYNAMIC_SPLIT_FUSE:-0}
+      IDLE_UNLOAD_TIMEOUT_SECONDS: ${IDLE_UNLOAD_TIMEOUT_SECONDS:-}
       OVMS_DEVICE: GPU
     # user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     command:
@@ -113,9 +124,10 @@ services:
       - --kv_cache_precision
       - "${KV_CACHE_PRECISION:-u8}"
 
-  # --- NPU: /dev/accel (+ dri); Stateful — CB / prefix flags are NO-OPS ---
+  # --- NPU: /dev/accel (+ dri); Stateful — CB / prefix / DSF flags are NO-OPS ---
   # Do NOT pass cache_size / DSF / max_num_batched_tokens / max_num_seqs /
-  # prefix caching here (entrypoint also skips prefix for OVMS_DEVICE=NPU).
+  # prefix caching here (entrypoint also skips prefix/DSF for OVMS_DEVICE=NPU).
+  # IDLE_UNLOAD_TIMEOUT_SECONDS is OVMS-specific and OK on NPU (entrypoint may inject).
   ovms-npu:
     <<: *ovms-common
     profiles: ["npu"]
@@ -129,6 +141,8 @@ services:
       HF_TOKEN: ${HF_TOKEN:-}
       API_KEY: ${API_KEY:-}
       ENABLE_PREFIX_CACHING: ${ENABLE_PREFIX_CACHING:-0}
+      DYNAMIC_SPLIT_FUSE: ${DYNAMIC_SPLIT_FUSE:-0}
+      IDLE_UNLOAD_TIMEOUT_SECONDS: ${IDLE_UNLOAD_TIMEOUT_SECONDS:-}
       OVMS_DEVICE: NPU
     # user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     command:

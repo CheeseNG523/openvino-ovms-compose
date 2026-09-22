@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# OVMS entrypoint wrapper: optional --api_key_file + --enable_prefix_caching.
+# OVMS entrypoint wrapper: optional --api_key_file, --enable_prefix_caching,
+# --dynamic_split_fuse, --idle_unload_timeout_seconds.
 # Official image binary is typically /ovms/bin/ovms; fall back to PATH.
 set -euo pipefail
 
@@ -29,12 +30,27 @@ if [[ -n "${API_KEY_VALUE}" ]]; then
   extra+=(--api_key_file "${key_file}")
 fi
 
+OVMS_DEVICE="${OVMS_DEVICE:-CPU}"
+
 # Prefix caching: inject only for CPU/GPU when ENABLE_PREFIX_CACHING=1.
 # NPU Stateful treats this as a no-op — never pass it for NPU profiles.
-OVMS_DEVICE="${OVMS_DEVICE:-CPU}"
 ENABLE_PREFIX_CACHING="${ENABLE_PREFIX_CACHING:-0}"
 if [[ "${OVMS_DEVICE}" != "NPU" && "${ENABLE_PREFIX_CACHING}" == "1" ]]; then
   extra+=(--enable_prefix_caching)
+fi
+
+# Dynamic split fuse (OVMS GenAI scheduler). Pass only when =1 and not NPU
+# (NPU Stateful: documented no-op — do not inject).
+DYNAMIC_SPLIT_FUSE="${DYNAMIC_SPLIT_FUSE:-0}"
+if [[ "${OVMS_DEVICE}" != "NPU" && "${DYNAMIC_SPLIT_FUSE}" == "1" ]]; then
+  extra+=(--dynamic_split_fuse)
+fi
+
+# Idle unload (OVMS-specific). When set and non-empty (including 0), pass for
+# all devices including NPU. Unset / empty in compose → omit the flag.
+# Use ${VAR+x} so a literal 0 still counts as "set".
+if [[ -n "${IDLE_UNLOAD_TIMEOUT_SECONDS+x}" && -n "${IDLE_UNLOAD_TIMEOUT_SECONDS}" ]]; then
+  extra+=(--idle_unload_timeout_seconds "${IDLE_UNLOAD_TIMEOUT_SECONDS}")
 fi
 
 exec "${OVMS_BIN}" "$@" "${extra[@]}"
