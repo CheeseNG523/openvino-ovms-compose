@@ -1,24 +1,31 @@
-# Validation status
+# Validation status — `linux` branch
 
-**Date:** 2026-09-22 (Asia/Kuala_Lumpur)
+**Date:** 2026-09-23 (Asia/Kuala_Lumpur / MYT)  
+**Base:** `2fc2128` · **Spike:** Forge throwaway (config-only on build box)
 
-## What was validated
+## Honesty labels (live-proof gates)
 
-- Compose YAML structure (PyYAML parse)
-- `docker compose config` for profiles `cpu`, `gpu`, and `npu` (standalone Compose v2.29.7; no Docker Engine required for config)
-- Entrypoint / pull-model scripts: `bash -n` syntax check; `chmod +x`
-- Resolved config checks: CPU has CB knobs; GPU has `/dev/dri` + render group; NPU has Stateful + `max_prompt_len` and **no** `cache_size` / `max_num_seqs` / `max_num_batched_tokens`
-- Polish commit wires `DYNAMIC_SPLIT_FUSE` / `IDLE_UNLOAD_TIMEOUT_SECONDS` and auth-aware healthcheck in config only — **does not add runtime proof**
+| Flag | Meaning | State |
+| --- | --- | --- |
+| **LP-L-CPU** | Live `docker compose --profile cpu up` + `GET /v1/models` (+ chat) on bare-metal/native Linux | **Unproven** |
+| **LP-L-GPU** | Live GPU profile (`/dev/dri` + `RENDER_GID`) + `/v1/models` (+ chat) | **Unproven** |
+| **LP-L-NPU** | Live NPU profile (`/dev/accel` + Stateful) + `/v1/models` (+ chat) | **Unproven** |
+| **LP-IMG** | Pinned tag `openvino/model_server:2026.4.0-gpu` pullability | **Unproven** |
 
-## What was **not** proven on the build box
+Build box had **no** Docker Engine and **no** `/dev/dri` / `/dev/accel`. Do **not** treat config validation as runtime success.
 
-- `docker pull` of `openvino/model_server:2026.4.0-gpu`
-- `docker compose up` / container start
-- Live `GET /v1/models` or chat completion
-- Whether the official image includes `curl`/`wget` (healthcheck falls back / fails closed)
-- Whether `/ovms/bin/ovms` vs `ovms` on PATH matches the pinned tag (entrypoint probes both)
-- Intel GPU (`/dev/dri`) or NPU (`/dev/accel`) passthrough
-- End-to-end `--api_key_file` / `--enable_prefix_caching` / `--dynamic_split_fuse` / `--idle_unload_timeout_seconds` against a live OVMS process
-- Auth-aware healthcheck against a live process with `API_KEY` set
+## What was validated (this spike)
 
-Runtime proof needs a host with Docker Engine (and optionally Intel GPU/NPU drivers). Config validation alone does not equal a serving smoke test.
+- Compose YAML structure
+- `docker compose --profile {cpu,gpu,npu} config` (standalone Compose v2.29.7; no engine)
+- Entrypoint / pull-model: `bash -n`; scripts LF / executable
+- Resolved config: CPU has CB knobs; GPU has `/dev/dri` + `group_add` RENDER_GID; NPU has Stateful + `max_prompt_len` and **no** CB size/seqs/batched/DSF/prefix in command
+
+## What was **not** proven
+
+- `docker pull` / `compose up` / live OpenAI REST
+- Whether the image includes `curl`/`wget` (healthcheck fails closed otherwise)
+- Intel GPU or NPU passthrough
+- End-to-end `--api_key_file` / prefix / DSF / idle unload against a live OVMS process
+
+Runtime proof needs a Linux host with Docker Engine (and optionally Intel GPU/NPU drivers).

@@ -1,9 +1,10 @@
-# OpenVINO Model Server — Docker Compose
-# Profiles: cpu | gpu | npu
+# OpenVINO Model Server — Docker Compose (linux branch)
+# Profiles: cpu | gpu | npu  — bare-metal / native Linux
 #   docker compose --profile cpu up
 #   docker compose --profile gpu up
 #   docker compose --profile npu up
 # Image pin: openvino/model_server:2026.4.0-gpu (CPU works on this tag; accel needs it)
+# Sibling: windows branch uses /dev/dxg (no npu). Do not mix device YAML across branches.
 #
 # WARNING: Enable only ONE profile at a time. Starting two (e.g. cpu+gpu)
 # is unsupported — they share the same host REST/gRPC ports and will clash.

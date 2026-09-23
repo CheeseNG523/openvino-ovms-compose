@@ -1,10 +1,12 @@
-# openvino-ovms-compose
+# openvino-ovms-compose — **`linux` branch**
 
-Serve [OpenVINO Model Server](https://docs.openvino.ai/2026/model-server/ovms_what_is_openvino_model_server.html) (OVMS) for LLM text generation on a **single host** (CPU / Intel GPU / NPU) with an OpenAI-compatible REST API via Docker Compose.
+Serve [OpenVINO Model Server](https://docs.openvino.ai/2026/model-server/ovms_what_is_openvino_model_server.html) (OVMS) for LLM text generation on a **bare-metal / native Linux** host (CPU / Intel GPU / NPU) with an OpenAI-compatible REST API via Docker Compose.
+
+**Branch:** `linux` (profiles `cpu` | `gpu` | `npu`). For Windows Docker Desktop WSL2, use the sibling **`windows`** branch (GPU via `/dev/dxg`; NPU omitted).
 
 Public repo target: [CheeseNG523/openvino-ovms-compose](https://github.com/CheeseNG523/openvino-ovms-compose).
 
-> **Honesty:** Forge/Workshop validated **compose config** only on the build box (no Docker Engine / no live chat completion). Runtime proof needs a Docker host (+ optional Intel GPU/NPU). See [docs/VALIDATION_STATUS.md](docs/VALIDATION_STATUS.md).
+> **Honesty:** Forge spike validated **compose config** only on the build box (no Docker Engine / no live chat). LP-L-CPU / LP-L-GPU / LP-L-NPU / LP-IMG remain **Unproven**. See [docs/VALIDATION_STATUS.md](docs/VALIDATION_STATUS.md).
 
 ## Quickstart
 
@@ -161,26 +163,11 @@ curl -sf http://localhost:8000/v1/models
 # curl -sf http://localhost:8000/v2/health/ready
 ```
 
-## WSL2
+## Windows / WSL2?
 
-On WSL2 with Intel GPU passthrough you typically need:
+This **`linux`** branch uses `/dev/dri` + `RENDER_GID` for GPU and `/dev/accel` for NPU. That YAML is **wrong** for Docker Desktop WSL2.
 
-- device `/dev/dxg`
-- bind-mount host WSL libs, e.g. `/usr/lib/wsl` → container `/usr/lib/wsl`
-- still use the `*-gpu` image tag
-
-Example sketch (not the default service — add under `ovms-gpu` or a custom override when on WSL):
-
-```yaml
-devices:
-  - /dev/dxg
-volumes:
-  - ./models:/models:rw
-  - /usr/lib/wsl:/usr/lib/wsl
-  - ./scripts/entrypoint.sh:/usr/local/bin/ovms-entrypoint.sh:ro
-```
-
-Confirm your distro’s Level Zero / oneAPI driver story; WSL paths vary. Native Linux is the better-supported path.
+Use the **`windows`** branch instead (`/dev/dxg` + `/usr/lib/wsl` volume; no NPU profile). Do not copy `dri` + `RENDER_GID` onto a WSL2 host.
 
 ## Optional model pull helper
 
@@ -212,7 +199,7 @@ See [docs/VLLM_FLAG_MAP.md](docs/VLLM_FLAG_MAP.md) and comments in `.env.example
 
 ```
 openvino-ovms-compose/
-  docker-compose.yml      # profiles: cpu | gpu | npu (one at a time)
+  docker-compose.yml      # linux branch: cpu | gpu | npu (one at a time)
   .env.example
   README.md
   models/.gitkeep         # weights gitignored
