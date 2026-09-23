@@ -1,24 +1,41 @@
-# Validation status
+# Validation status — `windows` branch
 
-**Date:** 2026-09-22 (Asia/Kuala_Lumpur)
+**Date:** 2026-09-23 (Asia/Kuala_Lumpur / MYT)  
+**Base:** `2fc2128` · **Spike:** Forge throwaway (config-only on Linux build box)
 
-## What was validated
+## Honesty labels (live-proof gates)
 
-- Compose YAML structure (PyYAML parse)
-- `docker compose config` for profiles `cpu`, `gpu`, and `npu` (standalone Compose v2.29.7; no Docker Engine required for config)
-- Entrypoint / pull-model scripts: `bash -n` syntax check; `chmod +x`
-- Resolved config checks: CPU has CB knobs; GPU has `/dev/dri` + render group; NPU has Stateful + `max_prompt_len` and **no** `cache_size` / `max_num_seqs` / `max_num_batched_tokens`
-- Polish commit wires `DYNAMIC_SPLIT_FUSE` / `IDLE_UNLOAD_TIMEOUT_SECONDS` and auth-aware healthcheck in config only — **does not add runtime proof**
+| Flag | Meaning | State |
+| --- | --- | --- |
+| **LP-W-CPU** | Live `docker compose --profile cpu up` on Docker Desktop WSL2 + `/v1/models` (+ chat) | **Unproven** |
+| **LP-W-GPU** | Live GPU profile (`/dev/dxg` + `/usr/lib/wsl`) + `/v1/models` (+ chat) | **Unproven — experimental** until Forge proves on a real DD WSL2 + Intel GPU host |
+| **LP-W-GPU-LDLP** | WSL GPU needs `LD_LIBRARY_PATH=/usr/lib/wsl/lib` (or similar) for Level Zero / Intel stack | **Unproven** (compose leaves it commented; document if smoke requires it) |
+| **LP-W-NPU** | Windows Compose NPU | **Expect-fail / OOS** — not implemented; use `ovms.exe` or `linux` branch |
+| **LP-IMG** | Pinned tag `openvino/model_server:2026.4.0-gpu` pullability | **Unproven** |
 
-## What was **not** proven on the build box
+Build box: Linux, **no** Docker Engine, **no** `/dev/dxg`. Config validation of the windows YAML does **not** prove WSL2 GPU.
 
-- `docker pull` of `openvino/model_server:2026.4.0-gpu`
-- `docker compose up` / container start
-- Live `GET /v1/models` or chat completion
-- Whether the official image includes `curl`/`wget` (healthcheck falls back / fails closed)
-- Whether `/ovms/bin/ovms` vs `ovms` on PATH matches the pinned tag (entrypoint probes both)
-- Intel GPU (`/dev/dri`) or NPU (`/dev/accel`) passthrough
-- End-to-end `--api_key_file` / `--enable_prefix_caching` / `--dynamic_split_fuse` / `--idle_unload_timeout_seconds` against a live OVMS process
-- Auth-aware healthcheck against a live process with `API_KEY` set
+## What was validated (this spike)
 
-Runtime proof needs a host with Docker Engine (and optionally Intel GPU/NPU drivers). Config validation alone does not equal a serving smoke test.
+- Compose YAML structure (cpu + gpu only; **no** `ovms-npu`)
+- `docker compose --profile {cpu,gpu} config` on Linux host with standalone Compose v2.29.7
+- GPU resolved config contains `/dev/dxg` and volume `/usr/lib/wsl:/usr/lib/wsl:ro`; **no** `group_add` / `RENDER_GID`
+- `.gitattributes` forces LF for `scripts/*.sh`
+- `bash -n` on entrypoint / pull-model; `pull-model.ps1` present (not executed — no Windows host)
+- CRLF risk check: scripts are LF on disk in this worktree
+
+## Windows pitfalls noted without a Windows host
+
+- **CRLF:** entrypoint with CRLF fails inside Linux containers — mitigated by `.gitattributes`
+- **DrvFs:** clone + `./models` on WSL filesystem, not `C:\...` — README warns
+- **Missing `/dev/dxg` on Linux validator:** compose `config` still succeeds (device nodes are not required for config render)
+- **Desktop “GPU” checkbox ≠ Intel:** README requires confirming `/dev/dxg` inside WSL
+- **Firewall:** allow inbound 8000/9000 on Windows host firewall
+- **NPU:** intentionally omitted; LP-W-NPU expect-fail OOS
+
+## What was **not** proven
+
+- Any live `compose up` on Docker Desktop
+- Intel GPU via `/dev/dxg` / Level Zero inside WSL2
+- Whether `/usr/lib/wsl` bind path is correct on current Docker Desktop (start here; LP-W-GPU-LDLP if libs need `LD_LIBRARY_PATH`)
+- Image pull, healthcheck curl/wget presence, auth/prefix/DSF live behavior

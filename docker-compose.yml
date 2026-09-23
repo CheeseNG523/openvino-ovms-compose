@@ -1,13 +1,14 @@
-# OpenVINO Model Server — Docker Compose
-# Profiles: cpu | gpu | npu
+# OpenVINO Model Server — Docker Compose (windows branch)
+# Profiles: cpu | gpu  — Docker Desktop WSL2 + Linux OVMS image (NOT Windows containers)
 #   docker compose --profile cpu up
 #   docker compose --profile gpu up
-#   docker compose --profile npu up
-# Image pin: openvino/model_server:2026.4.0-gpu (CPU works on this tag; accel needs it)
+# Image pin: openvino/model_server:2026.4.0-gpu (official Linux Hub image)
 #
 # WARNING: Enable only ONE profile at a time. Starting two (e.g. cpu+gpu)
 # is unsupported — they share the same host REST/gRPC ports and will clash.
-# Device binds differ per profile, so services stay separate by design.
+#
+# NPU via Compose on Windows/WSL2 is OUT OF SCOPE (no usable /dev/accel in WSL2).
+# Use native Windows ovms.exe or the sibling linux branch on bare-metal Linux.
 #
 # Non-goal: multi-GPU tensor parallel (OVMS GH #3816).
 
@@ -23,7 +24,7 @@ x-ovms-common: &ovms-common
     ENABLE_PREFIX_CACHING: ${ENABLE_PREFIX_CACHING:-0}
     DYNAMIC_SPLIT_FUSE: ${DYNAMIC_SPLIT_FUSE:-0}
     IDLE_UNLOAD_TIMEOUT_SECONDS: ${IDLE_UNLOAD_TIMEOUT_SECONDS:-}
-    # OVMS_DEVICE set per profile (CPU|GPU|NPU) for entrypoint prefix-cache / DSF logic
+    # OVMS_DEVICE set per profile (CPU|GPU) for entrypoint prefix-cache / DSF logic
   ports:
     - "${REST_PORT:-8000}:${REST_PORT:-8000}"
     - "${GRPC_PORT:-9000}:${GRPC_PORT:-9000}"
@@ -80,18 +81,24 @@ services:
       - --kv_cache_precision
       - "${KV_CACHE_PRECISION:-u8}"
     # Optional host user mapping — LEFT COMMENTED on purpose (root in container is OK for many hosts).
-    # Uncomment ONLY if ./models or /dev/dri|/dev/accel hit permission errors:
+    # Uncomment ONLY if ./models hits permission errors:
     # user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
 
-  # --- GPU: Intel /dev/dri + render group ---
+  # --- GPU: Docker Desktop WSL2 — /dev/dxg + WSL libs (NOT /dev/dri + RENDER_GID) ---
+  # Experimental until LP-W-GPU proven. If Level Zero needs it, try
+  # LD_LIBRARY_PATH=/usr/lib/wsl/lib (document as LP-W-GPU-LDLP finding).
+  # No group_add / RENDER_GID on this path.
   ovms-gpu:
     <<: *ovms-common
     profiles: ["gpu"]
     container_name: ovms-gpu
     devices:
-      - /dev/dri:/dev/dri
-    group_add:
-      - "${RENDER_GID:-109}"
+      - /dev/dxg:/dev/dxg
+    volumes:
+      - ./models:/models:rw
+      - /usr/lib/wsl:/usr/lib/wsl:ro
+      - ./scripts/entrypoint.sh:/usr/local/bin/ovms-entrypoint.sh:ro
+    # RENDER_GID / group_add intentionally omitted (linux-branch pattern; wrong for DD WSL2).
     environment:
       HF_TOKEN: ${HF_TOKEN:-}
       API_KEY: ${API_KEY:-}
@@ -99,6 +106,8 @@ services:
       DYNAMIC_SPLIT_FUSE: ${DYNAMIC_SPLIT_FUSE:-0}
       IDLE_UNLOAD_TIMEOUT_SECONDS: ${IDLE_UNLOAD_TIMEOUT_SECONDS:-}
       OVMS_DEVICE: GPU
+      # Optional: uncomment if smoke needs WSL lib path (LP-W-GPU-LDLP):
+      # LD_LIBRARY_PATH: /usr/lib/wsl/lib
     # user: LEFT COMMENTED on purpose. Uncomment ONLY on permission errors:
     # user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     command:
@@ -125,46 +134,3 @@ services:
       - "${MAX_NUM_BATCHED_TOKENS:-8192}"
       - --kv_cache_precision
       - "${KV_CACHE_PRECISION:-u8}"
-
-  # --- NPU: /dev/accel (+ dri); Stateful — CB / prefix / DSF flags are NO-OPS ---
-  # Do NOT pass cache_size / DSF / max_num_batched_tokens / max_num_seqs /
-  # prefix caching here (entrypoint also skips prefix/DSF for OVMS_DEVICE=NPU).
-  # IDLE_UNLOAD_TIMEOUT_SECONDS is OVMS-specific and OK on NPU (entrypoint may inject).
-  ovms-npu:
-    <<: *ovms-common
-    profiles: ["npu"]
-    container_name: ovms-npu
-    devices:
-      - /dev/accel:/dev/accel
-      - /dev/dri:/dev/dri
-    group_add:
-      - "${RENDER_GID:-109}"
-    environment:
-      HF_TOKEN: ${HF_TOKEN:-}
-      API_KEY: ${API_KEY:-}
-      ENABLE_PREFIX_CACHING: ${ENABLE_PREFIX_CACHING:-0}
-      DYNAMIC_SPLIT_FUSE: ${DYNAMIC_SPLIT_FUSE:-0}
-      IDLE_UNLOAD_TIMEOUT_SECONDS: ${IDLE_UNLOAD_TIMEOUT_SECONDS:-}
-      OVMS_DEVICE: NPU
-    # user: LEFT COMMENTED on purpose. Uncomment ONLY on permission errors:
-    # user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-    command:
-      - --rest_port
-      - "${REST_PORT:-8000}"
-      - --port
-      - "${GRPC_PORT:-9000}"
-      - --model_repository_path
-      - /models
-      - --source_model
-      - "${SOURCE_MODEL:-OpenVINO/Qwen2.5-1.5B-Instruct-int4-ov}"
-      - --task
-      - text_generation
-      - --target_device
-      - NPU
-      - --pull
-      - --cache_dir
-      - /models/.ovms_cache
-      - --pipeline_type
-      - Stateful
-      - --max_prompt_len
-      - "${MAX_PROMPT_LEN:-2048}"
