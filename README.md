@@ -6,7 +6,7 @@ Serve [OpenVINO Model Server](https://docs.openvino.ai/2026/model-server/ovms_wh
 
 Public repo target: [CheeseNG523/openvino-ovms-compose](https://github.com/CheeseNG523/openvino-ovms-compose).
 
-> **Honesty:** Forge spike validated **compose config** only (Linux build box; no Docker Desktop). **LP-W-CPU** / **LP-W-GPU** (experimental) / **LP-W-GPU-LDLP** / **LP-IMG** remain **Unproven**. **LP-W-NPU** = expect-fail / out of scope. See [docs/VALIDATION_STATUS.md](docs/VALIDATION_STATUS.md).
+> **Honesty:** Config-validated only (Linux build box; no Docker Desktop). **LP-W-CPU** / **LP-W-GPU** (experimental) / **LP-W-GPU-LDLP** / **LP-IMG** remain **Unproven**. **LP-W-NPU** = expect-fail / out of scope. See [docs/VALIDATION_STATUS.md](docs/VALIDATION_STATUS.md).
 
 ## Prerequisites (Docker Desktop WSL2)
 
@@ -21,6 +21,8 @@ Public repo target: [CheeseNG523/openvino-ovms-compose](https://github.com/Chees
 ## Quickstart
 
 **Enable only one Compose profile at a time** — cpu and gpu publish the same host ports.
+
+There is **no** `npu` profile on this branch: `docker compose --profile npu …` matches nothing (empty project), not an NPU service. Use the `linux` branch or `ovms.exe` for NPU.
 
 ```bash
 # Inside WSL, repo root on WSL fs:

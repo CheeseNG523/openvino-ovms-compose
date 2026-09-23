@@ -1,7 +1,7 @@
 # Validation status — `windows` branch
 
 **Date:** 2026-09-23 (Asia/Kuala_Lumpur / MYT)  
-**Base:** `2fc2128` · **Spike:** Forge throwaway (config-only on Linux build box)
+**Base:** `2fc2128` · **Branch:** `windows` (Workshop ship from Forge config-validated spike)
 
 ## Honesty labels (live-proof gates)
 
