@@ -6,7 +6,7 @@ Serve [OpenVINO Model Server](https://docs.openvino.ai/2026/model-server/ovms_wh
 
 Public repo target: [CheeseNG523/openvino-ovms-compose](https://github.com/CheeseNG523/openvino-ovms-compose).
 
-> **Honesty:** Forge spike validated **compose config** only on the build box (no Docker Engine / no live chat). LP-L-CPU / LP-L-GPU / LP-L-NPU / LP-IMG remain **Unproven**. See [docs/VALIDATION_STATUS.md](docs/VALIDATION_STATUS.md).
+> **Honesty:** Config-validated only (no Docker Engine / no live chat on the build box). **LP-L-CPU** / **LP-L-GPU** / **LP-L-NPU** / **LP-IMG** remain **Unproven**. See [docs/VALIDATION_STATUS.md](docs/VALIDATION_STATUS.md).
 
 ## Quickstart
 
